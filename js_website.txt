@@ -1,0 +1,83 @@
+-->download Docker
+-->open powershell
+
+..download splash
+docker pull scrapinghub/splash
+
+..run splash
+docker run -p 8050:8050 scrapinghub/splash
+
+-->open browser enter http://localhost:8050
+
+-->pip install scrapy-splash
+
+
+__WRITING LUA__
+-->change the web address to your desired address where you will scrape
+
+-->open the website
+-->inspect the next element on google chrome to find the href
+
+-->use css selector
+#proxylisttable_next a
+//proxylisttable_next is the id of the button
+// a is the href 
+
+
+--> open splash run script
+
+function main(splash, args)
+  assert(splash:go(args.url))
+  assert(splash:wait(0.5))
+  treat=require('treat')
+  #result is our output strings
+  result = {}
+  # for loop in lua is (input, end, increment)
+  for i=1,9,1
+  do
+  #click the next button to find value
+    assert(splash:runjs('document.querySelector("#proxylisttable_next a").click()'))
+  	result[i]=splash.html()
+  end
+  return treat.as_array(result)
+end
+
+
+
+__SPLASH REQUEST__
+
+-->to create the spider automatically open terminal and type this
+
+-->create usproxy.py on the spiders folder
+
+import scrapy
+from scrapy_splash import SplashRequest
+from scrapy.selector import Selector
+
+class UsProxySpider(scrapy.Spider):
+    #name of the spider for crawling
+    name = 'usproxy'
+
+    #requesting url to crawl
+    def start_requests(self):
+        url = 'https://us-proxy.org'
+        yield SplashRequest(url=url, callback=self.parse,endpoint = 'render.html',args={'wait' : 0.5})
+        yield SplashRequest(url=url, callback=self.parse_other_pages,endpoint = 'execute',args={'wait' : 0.5, 'lua_source' : self.script},dont_filter=True)
+
+    #response
+    def parse(self, response):
+        for data in response.selector.xpath("//table[@id='proxylisttable']/tbody/tr"):
+            yield{
+                'ip' : data.xpath(".//td[1]/text()").extract_first(),
+                'port' : data.xpath(".//td[2]/text()").extract_first()
+            }
+
+    #second response from lua code
+    def parse_other_pages(self, response):
+        for page in response.data:
+            sel = Selector(text=page)
+            for data in sel.xpath("//table[@id='proxylisttable']/tbody/tr"):
+                yield{
+                    'ip' : data.xpath(".//td[1]/text()").extract_first(),
+                    'port' : data.xpath(".//td[2]/text()").extract_first()
+                }
